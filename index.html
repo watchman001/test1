@@ -42,33 +42,35 @@
     let scanner;
     let count = 0; // 点击次数
 
-    function startScan() {
-      // 点击次数 +1
-      alert(typeof Html5Qrcode);
-      count++;
-      document.getElementById("count").innerText = count;
-
-      document.getElementById("reader").style.display = "block";
-
-      scanner = new Html5Qrcode("reader");
-
-      scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: 250
-        },
-        (decodedText) => {
-          // 扫码成功
-          document.getElementById("result").innerText = decodedText;
-
-          scanner.stop();
-          document.getElementById("reader").style.display = "none";
-        },
-        (errorMessage) => {
-          // 忽略错误
+    async function startScan() {
+        count++;
+        document.getElementById("count").innerText = count;
+        document.getElementById("reader").style.display = "block";
+    
+        // 如果已经有实例在运行，先停止它（或者简单点，每次创建前清空）
+        if (scanner) {
+            try {
+                await scanner.stop();
+            } catch (e) {
+                // 忽略停止报错
+            }
         }
-      );
+    
+        scanner = new Html5Qrcode("reader");
+    
+        scanner.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: 250 },
+            (decodedText) => {
+                document.getElementById("result").innerText = decodedText;
+                scanner.stop();
+                document.getElementById("reader").style.display = "none";
+            }
+        ).catch(err => {
+            // 【关键】把错误显示出来，方便调试
+            document.getElementById("result").innerText = "错误: " + err;
+            console.error("相机启动失败：", err);
+        });
     }
   </script>
 
