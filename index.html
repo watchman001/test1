@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>扫码测试</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <!-- 更稳定的CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8"></script>
+
   <style>
     body {
       font-family: Arial;
@@ -28,6 +31,8 @@
 
   <button onclick="startScan()">开始扫码</button>
 
+  <p>按钮点击次数：<span id="count">0</span></p>
+
   <div id="reader" style="display:none;"></div>
 
   <h3>扫描结果：</h3>
@@ -35,27 +40,32 @@
 
   <script>
     let scanner;
+    let count = 0; // 点击次数
 
     function startScan() {
+      // 点击次数 +1
+      count++;
+      document.getElementById("count").innerText = count;
+
       document.getElementById("reader").style.display = "block";
 
       scanner = new Html5Qrcode("reader");
 
       scanner.start(
-        { facingMode: "environment" }, // 后置摄像头
+        { facingMode: "environment" },
         {
           fps: 10,
           qrbox: 250
         },
         (decodedText) => {
-          // 成功扫描
+          // 扫码成功
           document.getElementById("result").innerText = decodedText;
 
           scanner.stop();
           document.getElementById("reader").style.display = "none";
         },
         (errorMessage) => {
-          // 可以忽略扫描过程中的错误
+          // 忽略错误
         }
       );
     }
