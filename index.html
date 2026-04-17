@@ -1,78 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>扫码测试</title>
-
-  <!-- 更稳定的CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8"></script>
-
-  <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      padding: 20px;
-    }
-    #reader {
-      width: 300px;
-      margin: auto;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 18px;
-      margin-bottom: 20px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扫码测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        #reader { width: 100%; max-width: 400px; margin: 10px auto; min-height: 250px; border: 1px solid #ccc; }
+        button { padding: 12px 24px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; }
+        #status { color: #666; font-size: 14px; margin: 10px; }
+    </style>
 </head>
-
 <body>
 
-  <h2>扫码工具</h2>
-
-  <button onclick="startScan()">开始扫码</button>
-
-  <p>按钮点击次数1：<span id="count">0</span></p>
-
-  <div id="reader" style="display:none;"></div>
-
-  <h3>扫描结果：</h3>
-  <p id="result">暂无</p>
-
-  <script>
-    let scanner;
-    let count = 0; // 点击次数
-
-    async function startScan() {
-        count++;
-        document.getElementById("count").innerText = count;
-        document.getElementById("reader").style.display = "block";
+    <h2>简易扫码器</h2>
     
-        // 如果已经有实例在运行，先停止它（或者简单点，每次创建前清空）
-        if (scanner) {
-            try {
-                await scanner.stop();
-            } catch (e) {
-                // 忽略停止报错
+    <div id="status">等待操作...</div>
+    <button onclick="startScan()">唤起摄像头</button>
+    
+    <p>点击计数：<span id="count">0</span></p>
+
+    <div id="reader"></div>
+
+    <h3>扫描结果：</h3>
+    <p id="result" style="word-break: break-all; color: red;">暂无</p>
+
+    <script>
+        var html5QrCode;
+        var count = 0;
+
+        function updateStatus(msg) {
+            document.getElementById("status").innerText = msg;
+        }
+
+        function startScan() {
+            count++;
+            document.getElementById("count").innerText = count;
+            updateStatus("正在尝试启动相机...");
+
+            // 1. 如果已有实例，先清理
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    doStart();
+                }).catch(() => {
+                    doStart();
+                });
+            } else {
+                doStart();
             }
         }
-    
-        scanner = new Html5Qrcode("reader");
-    
-        scanner.start(
-            { facingMode: "environment" }, 
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                document.getElementById("result").innerText = decodedText;
-                scanner.stop();
-                document.getElementById("reader").style.display = "none";
-            }
-        ).catch(err => {
-            // 【关键】把错误显示出来，方便调试
-            document.getElementById("result").innerText = "错误: " + err;
-            console.error("相机启动失败：", err);
-        });
-    }
-  </script>
 
+        function doStart() {
+            // 每次重新实例对象以确保状态干净
+            html5QrCode = new Html5Qrcode("reader");
+            
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config,
+                (decodedText) => {
+                    // 成功扫码
+                    document.getElementById("result").innerText = decodedText;
+                    updateStatus("扫码成功！");
+                    html5QrCode.stop();
+                }
+            ).catch(err => {
+                // 捕获报错并显示在页面上
+                document.getElementById("result").innerText = "错误详情: " + err;
+                updateStatus("启动失败，请检查HTTPS环境或权限");
+            });
+        }
+    </script>
 </body>
 </html>
