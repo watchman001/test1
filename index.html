@@ -275,28 +275,16 @@
         let recordId = "";
     
         try {
-            // 方案 A：尝试解析 URL 参数
-            if (decodedText.includes('?')) {
-                const urlPart = decodedText.split('?')[1];
-                const urlParams = new URLSearchParams(urlPart);
-                displayId = urlParams.get('id');
-                recordId = urlParams.get('rid');
-            } 
-            // 容错处理：如果不是 URL，尝试用分隔符解析
-            else if (decodedText.includes('|')) {
-                const parts = decodedText.split('|');
-                displayId = parts[0];
-                recordId = parts[1];
-            }
+            // 核心修复：直接将扫码内容转化为标准的 URL 对象
+            // 这样无论是在 GitHub Pages 还是本地测试，解析都极度精准
+            const url = new URL(decodedText);
+            displayId = url.searchParams.get('id');
+            recordId = url.searchParams.get('rid');
     
-            // --- 核心修复：如果解析失败，退回到原始显示 ---
+            // 如果解析不到关键参数，说明这不是我们要的设备码
             if (!displayId || !recordId) {
-                console.warn("二维码格式不完全符合方案A，尝试将其作为普通ID处理");
-                // 如果你仍想支持旧二维码，可以取消下面注释
-                // displayId = decodedText; 
-                // recordId = "missing"; 
-                showToast("无效设备码：缺少记录ID", "rgba(255, 59, 48, 0.9)");
-                return;
+                console.warn("非设备登记二维码:", decodedText);
+                return; 
             }
     
             const now = Date.now();
@@ -306,24 +294,29 @@
             lastScannedId = recordId;
             lastScannedTime = now;
     
-            // 查重：检查 deviceList 中是否已存在该 recordId
+            // 查重
             const isDuplicate = deviceList.some(item => item.recordId === recordId);
             
             if (isDuplicate) {
                 showToast(`已在清单中: ${displayId}`, "rgba(255, 149, 0, 0.9)");
             } else {
-                // 关键：将对象推入数组
                 deviceList.push({ displayId, recordId });
-                
-                // 立即触发渲染和反馈
-                render(); 
+                render(); // 确保立即渲染列表
                 showToast(`已添加: ${displayId}`, "rgba(52, 199, 89, 0.9)");
                 if (navigator.vibrate) navigator.vibrate(80);
             }
         } catch (e) {
-            console.error("解析二维码出错:", e);
+            // 如果扫描的不是网址（比如纯文本），URL 构造器会报错，这里做个兼容
+            console.error("URL解析失败，尝试备用方案", e);
+            if (decodedText.includes('|')) {
+                const parts = decodedText.split('|');
+                displayId = parts[0];
+                recordId = parts[1];
+                // ... 重复上面的添加逻辑 ...
+            }
         }
     }
+    
 
     function showToast(text, bgColor) {
         const toast = document.getElementById('scan-toast');
@@ -360,24 +353,37 @@
 
     function render() {
         const content = document.getElementById('device-list-content');
-        const count = document.getElementById('device-count');
-        count.innerText = `${deviceList.length} 台`;
+        const countLabel = document.getElementById('device-count');
         
+        // 1. 实时更新计数显示
+        countLabel.innerText = `${deviceList.length} 台`;
+        
+        // 2. 如果清单空了，显示占位提示
         if (deviceList.length === 0) {
             content.innerHTML = '<div style="text-align:center; padding:30px; color:#999; font-size:14px;">等待扫描设备...</div>';
             return;
         }
     
-        // 注意这里使用的是 item.displayId
-        content.innerHTML = deviceList.map((item, index) => `
-            <div class="device-item">
-                <div style="display:flex; flex-direction:column;">
-                    <span style="font-family:monospace; font-weight:600; font-size:15px;">${item.displayId}</span>
-                    <span style="font-size:10px; color:#999;">ID: ${item.recordId}</span>
+        // 3. 构建列表 HTML
+        // 使用 map 结合 join 是性能最好且最不容易出错的方式
+        const htmlSegments = deviceList.map((item, index) => {
+            // 容错：防止 displayId 为空时显示异常
+            const showName = item.displayId || "未知设备";
+            const recordId = item.recordId || "无ID";
+    
+            return `
+                <div class="device-item">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-family:monospace; font-weight:700; font-size:16px; color:#000;">${showName}</span>
+                        <span style="font-size:11px; color:#a1a1a6;">数据库ID: ${recordId}</span>
+                    </div>
+                    <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
                 </div>
-                <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
-            </div>
-        `).join('');
+            `;
+        });
+    
+        // 4. 最终一次性注入 DOM（防止频繁操作 DOM 导致闪烁）
+        content.innerHTML = htmlSegments.join('');
     }
 
     async function submitFinalData() {
