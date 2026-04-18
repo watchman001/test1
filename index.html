@@ -2,76 +2,131 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>扫码测试</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>设备登记系统</title>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; }
-        #reader { width: 100%; max-width: 400px; margin: 10px auto; min-height: 250px; border: 1px solid #ccc; }
-        button { padding: 12px 24px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; }
-        #status { color: #666; font-size: 14px; margin: 10px; }
+        :root { --primary-color: #07c160; --error-color: #ff4d4f; }
+        body { font-family: -apple-system, sans-serif; background-color: #f7f7f7; padding: 20px; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); max-width: 500px; margin: auto; }
+        h2 { text-align: center; margin-top: 0; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+        .form-group { margin-bottom: 18px; text-align: left; }
+        .required::before { content: "*"; color: var(--error-color); margin-right: 4px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 14px; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        input.readonly { background-color: #f9f9f9; color: #666; cursor: not-allowed; }
+        .btn-scan { width: 100%; padding: 15px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
+        #reader { width: 100%; margin-top: 15px; border-radius: 8px; overflow: hidden; display: none; }
+        #result-display { margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 6px; display: none; }
+        .error-msg { color: var(--error-color); font-size: 13px; margin-top: 10px; display: none; background: #fff1f0; padding: 10px; }
     </style>
 </head>
 <body>
 
-    <h2>简易扫码器</h2>
-    
-    <div id="status">等待操作...</div>
-    <button onclick="startScan()">唤起摄像头</button>
-    
-    <p>点击计数：<span id="count">0</span></p>
+<div class="card">
+    <h2>设备使用登记</h2>
+    <hr>
 
+    <div class="form-group">
+        <label>已识别设备 ID</label>
+        <input type="text" id="deviceId" class="readonly" readonly placeholder="请扫码识别设备">
+    </div>
+
+    <div class="form-group">
+        <label class="required">使用事由</label>
+        <input type="text" id="reason" placeholder="请输入使用事由">
+    </div>
+
+    <div class="form-group">
+        <label class="required">使用人</label>
+        <input type="text" id="user" placeholder="请输入姓名">
+    </div>
+
+    <div id="error-box" class="error-msg"></div>
     <div id="reader"></div>
+    <div id="result-display"></div>
 
-    <h3>扫描结果：</h3>
-    <p id="result" style="word-break: break-all; color: red;">暂无</p>
+    <button id="mainBtn" class="btn-scan" onclick="handleButtonClick()">立即扫码登记</button>
+</div>
 
-    <script>
-        var html5QrCode;
-        var count = 0;
+<script>
+    let html5QrCode;
 
-        function updateStatus(msg) {
-            document.getElementById("status").innerText = msg;
+    // --- 逻辑 1：页面加载时自动解析 URL 参数 ---
+    window.onload = function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const idFromUrl = urlParams.get('id');
+        if (idFromUrl) {
+            document.getElementById('deviceId').value = idFromUrl;
+            document.getElementById('result-display').innerHTML = "已通过扫码自动识别设备";
+            document.getElementById('result-display').style.display = 'block';
         }
+    };
 
-        function startScan() {
-            count++;
-            document.getElementById("count").innerText = count;
-            updateStatus("正在尝试启动相机...");
+    function handleButtonClick() {
+        const devId = document.getElementById('deviceId').value;
+        // 如果已经有设备 ID，按钮变为“提交登记”；如果没有，则是“扫码”
+        if (!devId) {
+            startScan();
+        } else {
+            submitData();
+        }
+    }
 
-            // 1. 如果已有实例，先清理
-            if (html5QrCode && html5QrCode.isScanning) {
+    function startScan() {
+        const readerDiv = document.getElementById('reader');
+        readerDiv.style.display = 'block';
+        
+        if (html5QrCode) html5QrCode.clear();
+        html5QrCode = new Html5Qrcode("reader");
+
+        html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            (decodedText) => {
+                // --- 逻辑 2：解析扫描到的内容 ---
+                let finalId = decodedText;
+                try {
+                    // 如果扫到的是完整 URL，提取出 id 部分
+                    if (decodedText.includes('id=')) {
+                        const url = new URL(decodedText);
+                        finalId = url.searchParams.get('id');
+                    }
+                } catch(e) { /* 非 URL 则直接使用原始内容 */ }
+
+                document.getElementById('deviceId').value = finalId;
+                document.getElementById('mainBtn').innerText = "确认并提交登记";
+                
                 html5QrCode.stop().then(() => {
-                    doStart();
-                }).catch(() => {
-                    doStart();
+                    readerDiv.style.display = 'none';
                 });
-            } else {
-                doStart();
             }
+        ).catch(err => {
+            alert("摄像头启动失败，请检查权限");
+        });
+    }
+
+    function submitData() {
+        const reason = document.getElementById('reason').value.trim();
+        const user = document.getElementById('user').value.trim();
+        const deviceId = document.getElementById('deviceId').value;
+
+        if (!reason || !user) {
+            alert("请填写必填项");
+            return;
         }
 
-        function doStart() {
-            // 每次重新实例对象以确保状态干净
-            html5QrCode = new Html5Qrcode("reader");
-            
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const payload = {
+            deviceId,
+            reason,
+            user,
+            time: new Date().toISOString()
+        };
 
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config,
-                (decodedText) => {
-                    // 成功扫码
-                    document.getElementById("result").innerText = decodedText;
-                    updateStatus("扫码成功！");
-                    html5QrCode.stop();
-                }
-            ).catch(err => {
-                // 捕获报错并显示在页面上
-                document.getElementById("result").innerText = "错误详情: " + err;
-                updateStatus("启动失败，请检查HTTPS环境或权限");
-            });
-        }
-    </script>
+        console.log("发送给中转接口的数据：", payload);
+        alert("登记提交成功！（此处对接企业微信接口）");
+    }
+</script>
 </body>
 </html>
