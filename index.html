@@ -403,9 +403,13 @@
         try {
             const response = await fetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X_Api_Token': 'MySecureToken123' // 这里的 Token 要和后端一致
+                },
                 body: JSON.stringify(payload)
             });
+            
 
             if (response.ok) {
                 alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
