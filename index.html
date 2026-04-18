@@ -271,36 +271,57 @@
     }
 
     function onScanSuccess(decodedText) {
-        let finalId = decodedText;
-        
-        // 自动解析 URL 中的 id 参数
-        if (decodedText.toLowerCase().includes('id=')) {
-            try {
-                const urlObj = new URL(decodedText);
-                finalId = urlObj.searchParams.get('id') || decodedText;
-            } catch(e) {
-                const parts = decodedText.split('id=');
-                if (parts[1]) finalId = parts[1].split('&')[0];
+        let displayId = "";
+        let recordId = "";
+    
+        try {
+            // 方案 A：尝试解析 URL 参数
+            if (decodedText.includes('?')) {
+                const urlPart = decodedText.split('?')[1];
+                const urlParams = new URLSearchParams(urlPart);
+                displayId = urlParams.get('id');
+                recordId = urlParams.get('rid');
+            } 
+            // 容错处理：如果不是 URL，尝试用分隔符解析
+            else if (decodedText.includes('|')) {
+                const parts = decodedText.split('|');
+                displayId = parts[0];
+                recordId = parts[1];
             }
-        }
-
-        const now = Date.now();
-
-        // 冷却逻辑：相同二维码在5秒内不重复处理
-        if (finalId === lastScannedId && (now - lastScannedTime) < COOLDOWN_MS) {
-            return;
-        }
-
-        lastScannedId = finalId;
-        lastScannedTime = now;
-
-        if (deviceList.includes(finalId)) {
-            showToast(`已在清单中: ${finalId}`, "rgba(255, 149, 0, 0.9)");
-        } else {
-            deviceList.push(finalId);
-            render();
-            showToast(`成功添加: ${finalId}`, "rgba(52, 199, 89, 0.9)");
-            if (navigator.vibrate) navigator.vibrate(80); // 震动反馈
+    
+            // --- 核心修复：如果解析失败，退回到原始显示 ---
+            if (!displayId || !recordId) {
+                console.warn("二维码格式不完全符合方案A，尝试将其作为普通ID处理");
+                // 如果你仍想支持旧二维码，可以取消下面注释
+                // displayId = decodedText; 
+                // recordId = "missing"; 
+                showToast("无效设备码：缺少记录ID", "rgba(255, 59, 48, 0.9)");
+                return;
+            }
+    
+            const now = Date.now();
+            // 冷却机制：5秒内相同 recordId 不触发
+            if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
+    
+            lastScannedId = recordId;
+            lastScannedTime = now;
+    
+            // 查重：检查 deviceList 中是否已存在该 recordId
+            const isDuplicate = deviceList.some(item => item.recordId === recordId);
+            
+            if (isDuplicate) {
+                showToast(`已在清单中: ${displayId}`, "rgba(255, 149, 0, 0.9)");
+            } else {
+                // 关键：将对象推入数组
+                deviceList.push({ displayId, recordId });
+                
+                // 立即触发渲染和反馈
+                render(); 
+                showToast(`已添加: ${displayId}`, "rgba(52, 199, 89, 0.9)");
+                if (navigator.vibrate) navigator.vibrate(80);
+            }
+        } catch (e) {
+            console.error("解析二维码出错:", e);
         }
     }
 
@@ -346,10 +367,14 @@
             content.innerHTML = '<div style="text-align:center; padding:30px; color:#999; font-size:14px;">等待扫描设备...</div>';
             return;
         }
-
-        content.innerHTML = deviceList.map((id, index) => `
+    
+        // 注意这里使用的是 item.displayId
+        content.innerHTML = deviceList.map((item, index) => `
             <div class="device-item">
-                <span style="font-family:monospace; font-weight:600; font-size:15px;">${id}</span>
+                <div style="display:flex; flex-direction:column;">
+                    <span style="font-family:monospace; font-weight:600; font-size:15px;">${item.displayId}</span>
+                    <span style="font-size:10px; color:#999;">ID: ${item.recordId}</span>
+                </div>
                 <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
             </div>
         `).join('');
