@@ -396,13 +396,9 @@
 
         submitBtn.disabled = true;
         submitBtn.innerText = "正在同步...";
+        
+        const payload = { reason, user, devices: deviceList };
 
-        const payload = {
-            reason: reason,
-            user: user,
-            devices: deviceList,
-            timestamp: Date.now().toString() // 适配企业微信13位时间戳要求
-        };
 
         try {
             const response = await fetch(CLOUD_FUNCTION_URL, {
