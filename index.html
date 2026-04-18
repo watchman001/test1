@@ -1,131 +1,320 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>设备登记系统</title>
+    <title>设备登记系统-稳定版</title>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        :root { --primary-color: #07c160; --error-color: #ff4d4f; }
-        body { font-family: -apple-system, sans-serif; background-color: #f7f7f7; padding: 20px; color: #333; }
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); max-width: 500px; margin: auto; }
-        h2 { text-align: center; margin-top: 0; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
-        .form-group { margin-bottom: 18px; text-align: left; }
-        .required::before { content: "*"; color: var(--error-color); margin-right: 4px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 14px; }
-        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-        input.readonly { background-color: #f9f9f9; color: #666; cursor: not-allowed; }
-        .btn-scan { width: 100%; padding: 15px; background: var(--primary-color); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; }
-        #reader { width: 100%; margin-top: 15px; border-radius: 8px; overflow: hidden; display: none; }
-        #result-display { margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 6px; display: none; }
-        .error-msg { color: var(--error-color); font-size: 13px; margin-top: 10px; display: none; background: #fff1f0; padding: 10px; }
+        :root {
+            --ios-green: #34c759; --ios-blue: #007aff; --ios-red: #ff3b30;
+            --ios-bg: #f2f2f7; --ios-card: #ffffff;
+            --text-main: #1c1c1e; --text-sub: #8e8e93;
+        }
+
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            background-color: var(--ios-bg);
+            color: var(--text-main);
+            margin: 0; padding: 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { max-width: 500px; margin: auto; }
+
+        /* 必填星号在左上角 */
+        .required { position: relative; }
+        .required::before {
+            content: "*"; color: var(--ios-red);
+            position: absolute; top: -4px; left: -10px;
+            font-size: 14px;
+        }
+
+        .card {
+            background: var(--ios-card); border-radius: 14px;
+            padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; margin-left: 12px; }
+
+        input {
+            width: 100%; padding: 14px; border: 1px solid #e5e5ea;
+            border-radius: 12px; box-sizing: border-box; font-size: 16px;
+            background: #f9f9f9; transition: all 0.2s;
+        }
+
+        input:focus { border-color: var(--ios-blue); background: #fff; outline: none; }
+
+        /* 相机动画容器 */
+        #reader-container {
+            max-height: 0; opacity: 0; overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+            margin: 0; border-radius: 14px; background: #000;
+        }
+
+        /* 1. 强制容器内部对齐 */
+        #reader {
+            width: 100%;
+            background: #000;
+            /* 移除库可能自带的内边距 */
+            padding: 0 !important;
+            border: none !important;
+            /* 确保内部元素居中 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 250px; /* 给一个最小高度，防止未加载时塌陷 */
+        }
+
+        /* 2. 核心：隐藏 html5-qrcode 库自带的所有文本提示和控制按钮 */
+        /* 这些元素是导致不居中的罪魁祸首 */
+        #reader span, 
+        #reader button,
+        #reader img[alt="Camera menu icon"],
+        #reader select {
+            display: none !important;
+        }
+
+        /* 3. 针对扫描窗口的直接控制 */
+        /* 库生成的扫描窗口通常是一个带有特定的 id 或 canvas */
+        #reader__scan_region {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+        }
+
+        #reader__scan_region video {
+            /* 确保视频充满容器且不留黑边 */
+            object-fit: cover;
+        }
+
+        /* 4. 调整相机容器动画状态下的行为 */
+        #reader-container.active {
+            max-height: 450px; /* 适当调高，给居中留出空间 */
+            opacity: 1;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-group { display: flex; gap: 12px; margin-top: 15px; }
+        .btn {
+            flex: 1; border: none; border-radius: 14px;
+            font-size: 16px; font-weight: 600; padding: 16px 0;
+            cursor: pointer; transition: all 0.3s;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .btn:active { transform: scale(0.96); opacity: 0.9; }
+        .btn-scan { background: var(--ios-blue); color: white; }
+        .btn-scanning-active { background: var(--ios-red) !important; }
+        .btn-submit { background: var(--ios-green); color: white; }
+
+        /* 清单列表 */
+        .list-title {
+            font-size: 18px; font-weight: 700; margin: 25px 0 12px 10px;
+            display: flex; justify-content: space-between;
+        }
+
+        .device-item {
+            background: var(--ios-card); padding: 14px 16px; border-radius: 12px;
+            margin-bottom: 10px; display: flex; justify-content: space-between;
+            align-items: center; border: 1px solid #f0f0f5;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .btn-delete { background: #f2f2f7; color: var(--ios-red); border: none; padding: 6px 14px; border-radius: 8px; font-weight: 600; }
+
+        /* 错误提示框 */
+        #error-box {
+            background: #fff2f0; border: 1px solid #ffccc7; color: var(--ios-red);
+            padding: 12px; border-radius: 10px; font-size: 13px; margin-bottom: 15px; display: none;
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
+<div class="container">
     <h2>设备使用登记</h2>
-    <hr>
 
-    <div class="form-group">
-        <label>已识别设备 ID</label>
-        <input type="text" id="deviceId" class="readonly" readonly placeholder="请扫码识别设备">
+    <div id="error-box"></div>
+
+    <div class="card">
+        <div class="form-group">
+            <label class="required">使用事由</label>
+            <input type="text" id="reason" placeholder="请输入事由">
+        </div>
+        <div class="form-group">
+            <label class="required">使用人</label>
+            <input type="text" id="user" placeholder="您的姓名">
+        </div>
+
+        <div id="reader-container">
+            <div id="reader"></div>
+        </div>
+
+        <div class="btn-group">
+            <button id="scanBtn" class="btn btn-scan" onclick="handleScanToggle()">添加设备</button>
+            <button class="btn btn-submit" onclick="submitFinalData()">立即提交</button>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label class="required">使用事由</label>
-        <input type="text" id="reason" placeholder="请输入使用事由">
-    </div>
-
-    <div class="form-group">
-        <label class="required">使用人</label>
-        <input type="text" id="user" placeholder="请输入姓名">
-    </div>
-
-    <div id="error-box" class="error-msg"></div>
-    <div id="reader"></div>
-    <div id="result-display"></div>
-
-    <button id="mainBtn" class="btn-scan" onclick="handleButtonClick()">立即扫码登记</button>
+    <div class="list-title">已扫设备 <span id="device-count" style="font-weight: 400; font-size: 14px; color: #8e8e93;">0 台</span></div>
+    <div id="device-list-content"></div>
 </div>
 
 <script>
-    let html5QrCode;
+    let html5QrCode = null;
+    let deviceList = [];
+    let isScanning = false;
+    let isLock = false; // 竞态锁
 
-    // --- 逻辑 1：页面加载时自动解析 URL 参数 ---
-    window.onload = function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const idFromUrl = urlParams.get('id');
-        if (idFromUrl) {
-            document.getElementById('deviceId').value = idFromUrl;
-            document.getElementById('result-display').innerHTML = "已通过扫码自动识别设备";
-            document.getElementById('result-display').style.display = 'block';
-        }
-    };
+    // 页面加载逻辑
+    window.addEventListener('load', () => {
+        const id = new URLSearchParams(window.location.search).get('id');
+        if (id) addDevice(id);
+    });
 
-    function handleButtonClick() {
-        const devId = document.getElementById('deviceId').value;
-        // 如果已经有设备 ID，按钮变为“提交登记”；如果没有，则是“扫码”
-        if (!devId) {
-            startScan();
-        } else {
-            submitData();
-        }
-    }
+    async function handleScanToggle() {
+        if (isLock) return; // 锁定中，防止连点
+        isLock = true;
 
-    function startScan() {
-        const readerDiv = document.getElementById('reader');
-        readerDiv.style.display = 'block';
-        
-        if (html5QrCode) html5QrCode.clear();
-        html5QrCode = new Html5Qrcode("reader");
+        const scanBtn = document.getElementById('scanBtn');
+        const container = document.getElementById('reader-container');
+        const errorBox = document.getElementById('error-box');
 
-        html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-                // --- 逻辑 2：解析扫描到的内容 ---
-                let finalId = decodedText;
-                try {
-                    // 如果扫到的是完整 URL，提取出 id 部分
-                    if (decodedText.includes('id=')) {
-                        const url = new URL(decodedText);
-                        finalId = url.searchParams.get('id');
-                    }
-                } catch(e) { /* 非 URL 则直接使用原始内容 */ }
+        // 5. 解决键盘遮挡：强制失焦收起键盘
+        document.activeElement.blur();
 
-                document.getElementById('deviceId').value = finalId;
-                document.getElementById('mainBtn').innerText = "确认并提交登记";
+        try {
+            if (!isScanning) {
+                errorBox.style.display = 'none';
+                container.classList.add('active');
+                scanBtn.innerText = "结束扫码";
+                scanBtn.classList.add('btn-scanning-active');
+
+                // 4. 内存管理：确保之前的实例被清理
+                if (html5QrCode) {
+                    await html5QrCode.clear();
+                }
                 
-                html5QrCode.stop().then(() => {
-                    readerDiv.style.display = 'none';
-                });
+                html5QrCode = new Html5Qrcode("reader");
+                isScanning = true;
+
+                // 等待动画稍微展开后再启动硬件，减少视觉卡顿
+                setTimeout(async () => {
+                    try {
+                        await html5QrCode.start(
+                            // 2. 增强多摄像头调用：尝试调用环境摄像头并设置理想的分辨率
+                            { facingMode: "environment" },
+                            { 
+                                fps: 10, 
+                                qrbox: { width: 250, height: 250 },
+                                aspectRatio: 1.0
+                            },
+                            onScanSuccess
+                        );
+                    } catch (err) {
+                        handleCameraError(err);
+                    }
+                }, 400);
+            } else {
+                await stopAndReset();
             }
-        ).catch(err => {
-            alert("摄像头启动失败，请检查权限");
-        });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setTimeout(() => { isLock = false; }, 500); // 0.5秒后解锁
+        }
     }
 
-    function submitData() {
-        const reason = document.getElementById('reason').value.trim();
-        const user = document.getElementById('user').value.trim();
-        const deviceId = document.getElementById('deviceId').value;
+    async function stopAndReset() {
+        const scanBtn = document.getElementById('scanBtn');
+        const container = document.getElementById('reader-container');
+        
+        if (html5QrCode && html5QrCode.isScanning) {
+            await html5QrCode.stop();
+            // 4. 彻底清理实例释放内存
+            await html5QrCode.clear();
+        }
+        
+        container.classList.remove('active');
+        scanBtn.innerText = "添加设备";
+        scanBtn.classList.remove('btn-scanning-active');
+        isScanning = false;
+    }
 
-        if (!reason || !user) {
-            alert("请填写必填项");
+    function onScanSuccess(decodedText) {
+        let finalId = decodedText;
+        // 3. 健壮的 URL 解析
+        if (decodedText.toLowerCase().includes('id=')) {
+            try {
+                const parts = decodedText.split(/[?&]/);
+                const idPart = parts.find(p => p.toLowerCase().startsWith('id='));
+                if (idPart) finalId = idPart.split('=')[1];
+            } catch(e) { console.error("解析ID失败", e); }
+        }
+        addDevice(finalId);
+        if (navigator.vibrate) navigator.vibrate(80);
+    }
+
+    function handleCameraError(err) {
+        const errorBox = document.getElementById('error-box');
+        errorBox.style.display = 'block';
+        
+        // 6. 分类引导权限
+        if (err.name === 'NotAllowedError' || err.includes('Permission denied')) {
+            errorBox.innerHTML = "<strong>权限被拒：</strong>请点击浏览器地址栏左侧图标，重新开启摄像头权限。";
+        } else {
+            errorBox.innerHTML = "<strong>启动失败：</strong>请确保处于 HTTPS 安全环境或尝试更换浏览器。";
+        }
+        stopAndReset();
+    }
+
+    function addDevice(id) {
+        if (!id || deviceList.includes(id)) return;
+        deviceList.push(id);
+        render();
+    }
+
+    function removeDevice(index) {
+        deviceList.splice(index, 1);
+        render();
+    }
+
+    function render() {
+        const content = document.getElementById('device-list-content');
+        const count = document.getElementById('device-count');
+        count.innerText = `${deviceList.length} 台`;
+        
+        if (deviceList.length === 0) {
+            content.innerHTML = '<div style="text-align:center; padding:30px; color:#999; font-size:14px;">等待扫描设备...</div>';
             return;
         }
 
-        const payload = {
-            deviceId,
-            reason,
-            user,
-            time: new Date().toISOString()
-        };
+        content.innerHTML = deviceList.map((id, index) => `
+            <div class="device-item">
+                <span class="device-id">${id}</span>
+                <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
+            </div>
+        `).join('');
+    }
 
-        console.log("发送给中转接口的数据：", payload);
-        alert("登记提交成功！（此处对接企业微信接口）");
+    function submitFinalData() {
+        const r = document.getElementById('reason').value.trim();
+        const u = document.getElementById('user').value.trim();
+        if (!r || !u || deviceList.length === 0) {
+            alert("请完整填写表单并添加至少一个设备");
+            return;
+        }
+        console.log("提交数据:", { reason: r, user: u, devices: deviceList });
+        alert("提交成功！");
     }
 </script>
 </body>
