@@ -3,138 +3,175 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>设备登记系统-稳定版</title>
+    <title>设备使用登记</title>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         :root {
-            --ios-green: #34c759; --ios-blue: #007aff; --ios-red: #ff3b30;
-            --ios-bg: #f2f2f7; --ios-card: #ffffff;
-            --text-main: #1c1c1e; --text-sub: #8e8e93;
+            --ios-green: #34c759;
+            --ios-blue: #007aff;
+            --ios-red: #ff3b30;
+            --ios-bg: #f2f2f7;
+            --ios-card: #ffffff;
+            --text-main: #1c1c1e;
+            --text-sub: #8e8e93;
         }
 
         body {
-            font-family: -apple-system, system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--ios-bg);
             color: var(--text-main);
-            margin: 0; padding: 20px;
+            margin: 0;
+            padding: 20px;
             -webkit-font-smoothing: antialiased;
         }
 
         .container { max-width: 500px; margin: auto; }
 
-        /* 必填星号在左上角 */
-        .required { position: relative; }
-        .required::before {
-            content: "*"; color: var(--ios-red);
-            position: absolute; top: -4px; left: -10px;
-            font-size: 14px;
-        }
+        h2 { text-align: center; margin-bottom: 25px; font-weight: 700; color: #000; }
 
         .card {
-            background: var(--ios-card); border-radius: 14px;
-            padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+            background: var(--ios-card);
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
         }
 
         .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; margin-left: 12px; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-left: 12px;
+            position: relative;
+        }
+
+        .required::before {
+            content: "*";
+            color: var(--ios-red);
+            position: absolute;
+            top: -2px;
+            left: -10px;
+        }
 
         input {
-            width: 100%; padding: 14px; border: 1px solid #e5e5ea;
-            border-radius: 12px; box-sizing: border-box; font-size: 16px;
-            background: #f9f9f9; transition: all 0.2s;
-        }
-
-        input:focus { border-color: var(--ios-blue); background: #fff; outline: none; }
-
-        /* 相机动画容器 */
-        #reader-container {
-            max-height: 0; opacity: 0; overflow: hidden;
-            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
-            margin: 0; border-radius: 14px; background: #000;
-        }
-
-        /* 1. 强制容器内部对齐 */
-        #reader {
             width: 100%;
+            padding: 14px;
+            border: 1px solid #e5e5ea;
+            border-radius: 12px;
+            box-sizing: border-box;
+            font-size: 16px;
+            background: #f9f9f9;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--ios-blue);
+            background: #fff;
+            outline: none;
+        }
+
+        /* 相机显示区域 */
+        #reader-container {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
             background: #000;
-            /* 移除库可能自带的内边距 */
-            padding: 0 !important;
-            border: none !important;
-            /* 确保内部元素居中 */
+            border-radius: 14px;
+            position: relative;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 250px; /* 给一个最小高度，防止未加载时塌陷 */
         }
 
-        /* 2. 核心：隐藏 html5-qrcode 库自带的所有文本提示和控制按钮 */
-        /* 这些元素是导致不居中的罪魁祸首 */
-        #reader span, 
-        #reader button,
-        #reader img[alt="Camera menu icon"],
-        #reader select {
-            display: none !important;
-        }
-
-        /* 3. 针对扫描窗口的直接控制 */
-        /* 库生成的扫描窗口通常是一个带有特定的 id 或 canvas */
-        #reader__scan_region {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 100% !important;
-        }
-
-        #reader__scan_region video {
-            /* 确保视频充满容器且不留黑边 */
-            object-fit: cover;
-        }
-
-        /* 4. 调整相机容器动画状态下的行为 */
         #reader-container.active {
-            max-height: 450px; /* 适当调高，给居中留出空间 */
+            max-height: 400px;
             opacity: 1;
             margin: 20px 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        }
+
+        #reader { width: 100% !important; border: none !important; }
+        
+        /* 隐藏库自带的冗余 UI */
+        #reader span, #reader button { display: none !important; }
+
+        /* 扫码成功/重复提示浮窗 */
+        #scan-toast {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
         .btn-group { display: flex; gap: 12px; margin-top: 15px; }
+
         .btn {
-            flex: 1; border: none; border-radius: 14px;
-            font-size: 16px; font-weight: 600; padding: 16px 0;
-            cursor: pointer; transition: all 0.3s;
-            display: flex; align-items: center; justify-content: center;
+            flex: 1;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 16px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .btn:active { transform: scale(0.96); opacity: 0.9; }
+        .btn:active { transform: scale(0.96); }
+
         .btn-scan { background: var(--ios-blue); color: white; }
         .btn-scanning-active { background: var(--ios-red) !important; }
         .btn-submit { background: var(--ios-green); color: white; }
+        .btn:disabled { background: #d1d1d6; cursor: not-allowed; }
 
-        /* 清单列表 */
+        /* 清单列表样式 */
         .list-title {
-            font-size: 18px; font-weight: 700; margin: 25px 0 12px 10px;
-            display: flex; justify-content: space-between;
+            font-size: 18px;
+            font-weight: 700;
+            margin: 25px 0 12px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
         }
 
         .device-item {
-            background: var(--ios-card); padding: 14px 16px; border-radius: 12px;
-            margin-bottom: 10px; display: flex; justify-content: space-between;
-            align-items: center; border: 1px solid #f0f0f5;
-            animation: slideUp 0.3s ease-out;
+            background: var(--ios-card);
+            padding: 14px 16px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #f0f0f5;
+            animation: slideUp 0.3s ease-out forwards;
         }
 
-        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-        .btn-delete { background: #f2f2f7; color: var(--ios-red); border: none; padding: 6px 14px; border-radius: 8px; font-weight: 600; }
-
-        /* 错误提示框 */
-        #error-box {
-            background: #fff2f0; border: 1px solid #ffccc7; color: var(--ios-red);
-            padding: 12px; border-radius: 10px; font-size: 13px; margin-bottom: 15px; display: none;
+        .btn-delete {
+            background: #f2f2f7;
+            color: var(--ios-red);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -142,8 +179,6 @@
 
 <div class="container">
     <h2>设备使用登记</h2>
-
-    <div id="error-box"></div>
 
     <div class="card">
         <div class="form-group">
@@ -156,82 +191,129 @@
         </div>
 
         <div id="reader-container">
+            <div id="scan-toast"></div>
             <div id="reader"></div>
         </div>
 
         <div class="btn-group">
             <button id="scanBtn" class="btn btn-scan" onclick="handleScanToggle()">添加设备</button>
-            <button class="btn btn-submit" onclick="submitFinalData()">立即提交</button>
+            <button id="submitBtn" class="btn btn-submit" onclick="submitFinalData()">立即提交</button>
         </div>
     </div>
 
-    <div class="list-title">已扫设备 <span id="device-count" style="font-weight: 400; font-size: 14px; color: #8e8e93;">0 台</span></div>
-    <div id="device-list-content"></div>
+    <div class="list-title">
+        已扫设备 
+        <span id="device-count" style="font-weight: 400; font-size: 13px; color: var(--text-sub);">0 台</span>
+    </div>
+    <div id="device-list-content">
+        <div style="text-align:center; padding:30px; color:#999; font-size:14px;">等待扫描设备...</div>
+    </div>
 </div>
 
 <script>
+    // --- 配置区 ---
+    // 替换为你腾讯云函数的公网访问URL
+    const CLOUD_FUNCTION_URL = "https://service-xxxx.tencentcloudapi.com/release/xxx"; 
+
     let html5QrCode = null;
     let deviceList = [];
     let isScanning = false;
-    let isLock = false; // 竞态锁
+    let isLock = false;
 
-    // 页面加载逻辑
-    window.addEventListener('load', () => {
-        const id = new URLSearchParams(window.location.search).get('id');
-        if (id) addDevice(id);
-    });
+    // --- 冷却机制变量 ---
+    let lastScannedId = null;
+    let lastScannedTime = 0;
+    const COOLDOWN_MS = 5000; // 5秒内相同二维码不重复提示
 
     async function handleScanToggle() {
-        if (isLock) return; // 锁定中，防止连点
+        if (isLock) return;
         isLock = true;
+        
+        // 强制收起键盘
+        document.activeElement.blur();
 
         const scanBtn = document.getElementById('scanBtn');
         const container = document.getElementById('reader-container');
-        const errorBox = document.getElementById('error-box');
-
-        // 5. 解决键盘遮挡：强制失焦收起键盘
-        document.activeElement.blur();
 
         try {
             if (!isScanning) {
-                errorBox.style.display = 'none';
                 container.classList.add('active');
                 scanBtn.innerText = "结束扫码";
                 scanBtn.classList.add('btn-scanning-active');
 
-                // 4. 内存管理：确保之前的实例被清理
-                if (html5QrCode) {
-                    await html5QrCode.clear();
-                }
-                
+                if (html5QrCode) await html5QrCode.clear();
                 html5QrCode = new Html5Qrcode("reader");
                 isScanning = true;
 
-                // 等待动画稍微展开后再启动硬件，减少视觉卡顿
+                // 稍微延迟启动，等待容器展开动画完成
                 setTimeout(async () => {
                     try {
                         await html5QrCode.start(
-                            // 2. 增强多摄像头调用：尝试调用环境摄像头并设置理想的分辨率
                             { facingMode: "environment" },
                             { 
-                                fps: 10, 
+                                fps: 15, 
                                 qrbox: { width: 250, height: 250 },
-                                aspectRatio: 1.0
+                                aspectRatio: 1.0 
                             },
                             onScanSuccess
                         );
                     } catch (err) {
-                        handleCameraError(err);
+                        alert("无法启动相机，请确保处于HTTPS环境并允许权限");
+                        stopAndReset();
                     }
                 }, 400);
             } else {
                 await stopAndReset();
             }
-        } catch (e) {
-            console.error(e);
         } finally {
-            setTimeout(() => { isLock = false; }, 500); // 0.5秒后解锁
+            setTimeout(() => { isLock = false; }, 500);
         }
+    }
+
+    function onScanSuccess(decodedText) {
+        let finalId = decodedText;
+        
+        // 自动解析 URL 中的 id 参数
+        if (decodedText.toLowerCase().includes('id=')) {
+            try {
+                const urlObj = new URL(decodedText);
+                finalId = urlObj.searchParams.get('id') || decodedText;
+            } catch(e) {
+                const parts = decodedText.split('id=');
+                if (parts[1]) finalId = parts[1].split('&')[0];
+            }
+        }
+
+        const now = Date.now();
+
+        // 冷却逻辑：相同二维码在5秒内不重复处理
+        if (finalId === lastScannedId && (now - lastScannedTime) < COOLDOWN_MS) {
+            return;
+        }
+
+        lastScannedId = finalId;
+        lastScannedTime = now;
+
+        if (deviceList.includes(finalId)) {
+            showToast(`已在清单中: ${finalId}`, "rgba(255, 149, 0, 0.9)");
+        } else {
+            deviceList.push(finalId);
+            render();
+            showToast(`成功添加: ${finalId}`, "rgba(52, 199, 89, 0.9)");
+            if (navigator.vibrate) navigator.vibrate(80); // 震动反馈
+        }
+    }
+
+    function showToast(text, bgColor) {
+        const toast = document.getElementById('scan-toast');
+        toast.innerText = text;
+        toast.style.backgroundColor = bgColor;
+        toast.style.opacity = "1";
+        
+        clearTimeout(window.toastTimer);
+        window.toastTimer = setTimeout(() => {
+            toast.style.opacity = "0";
+        }, 2000);
     }
 
     async function stopAndReset() {
@@ -240,7 +322,6 @@
         
         if (html5QrCode && html5QrCode.isScanning) {
             await html5QrCode.stop();
-            // 4. 彻底清理实例释放内存
             await html5QrCode.clear();
         }
         
@@ -248,39 +329,7 @@
         scanBtn.innerText = "添加设备";
         scanBtn.classList.remove('btn-scanning-active');
         isScanning = false;
-    }
-
-    function onScanSuccess(decodedText) {
-        let finalId = decodedText;
-        // 3. 健壮的 URL 解析
-        if (decodedText.toLowerCase().includes('id=')) {
-            try {
-                const parts = decodedText.split(/[?&]/);
-                const idPart = parts.find(p => p.toLowerCase().startsWith('id='));
-                if (idPart) finalId = idPart.split('=')[1];
-            } catch(e) { console.error("解析ID失败", e); }
-        }
-        addDevice(finalId);
-        if (navigator.vibrate) navigator.vibrate(80);
-    }
-
-    function handleCameraError(err) {
-        const errorBox = document.getElementById('error-box');
-        errorBox.style.display = 'block';
-        
-        // 6. 分类引导权限
-        if (err.name === 'NotAllowedError' || err.includes('Permission denied')) {
-            errorBox.innerHTML = "<strong>权限被拒：</strong>请点击浏览器地址栏左侧图标，重新开启摄像头权限。";
-        } else {
-            errorBox.innerHTML = "<strong>启动失败：</strong>请确保处于 HTTPS 安全环境或尝试更换浏览器。";
-        }
-        stopAndReset();
-    }
-
-    function addDevice(id) {
-        if (!id || deviceList.includes(id)) return;
-        deviceList.push(id);
-        render();
+        lastScannedId = null; 
     }
 
     function removeDevice(index) {
@@ -300,21 +349,52 @@
 
         content.innerHTML = deviceList.map((id, index) => `
             <div class="device-item">
-                <span class="device-id">${id}</span>
+                <span style="font-family:monospace; font-weight:600; font-size:15px;">${id}</span>
                 <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
             </div>
         `).join('');
     }
 
-    function submitFinalData() {
-        const r = document.getElementById('reason').value.trim();
-        const u = document.getElementById('user').value.trim();
-        if (!r || !u || deviceList.length === 0) {
-            alert("请完整填写表单并添加至少一个设备");
-            return;
+    async function submitFinalData() {
+        const reason = document.getElementById('reason').value.trim();
+        const user = document.getElementById('user').value.trim();
+        const submitBtn = document.getElementById('submitBtn');
+
+        if (!reason || !user) return alert("请填写完整事由和姓名");
+        if (deviceList.length === 0) return alert("请至少添加一个设备");
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "正在同步...";
+
+        const payload = {
+            reason: reason,
+            user: user,
+            devices: deviceList,
+            timestamp: Date.now().toString() // 适配企业微信13位时间戳要求
+        };
+
+        try {
+            const response = await fetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
+                // 重置表单
+                deviceList = [];
+                render();
+                document.getElementById('reason').value = "";
+            } else {
+                throw new Error("服务器响应失败");
+            }
+        } catch (error) {
+            alert("❌ 提交失败，请检查网络或联系管理员\n" + error.message);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "立即提交";
         }
-        console.log("提交数据:", { reason: r, user: u, devices: deviceList });
-        alert("提交成功！");
     }
 </script>
 </body>
