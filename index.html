@@ -427,6 +427,39 @@
             submitBtn.innerText = "立即提交";
         }
     }
+
+    function checkInitialUrlParams() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const displayId = urlParams.get('id');
+            const recordId = urlParams.get('rid');
+    
+            if (displayId && recordId) {
+                // 确保 deviceList 已经定义
+                if (!deviceList.some(item => item.recordId === recordId)) {
+                    deviceList.push({ displayId, recordId });
+                    render(); // 调用你之前的渲染函数
+                    showToast(`已通过链接添加: ${displayId}`, "rgba(52, 199, 89, 0.9)");
+                    
+                    // 推荐开启：扫码进入后，清除地址栏参数，防止刷新页面时重复弹出提示
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+        } catch (e) {
+            console.error("初始参数解析失败", e);
+        }
+    }
+    // ==========================================
+    // 2. 在最后绑定事件，确保页面加载完立即执行
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+        // 执行 URL 参数检查
+        checkInitialUrlParams();
+        
+        // 如果你希望用户一扫码进来就直接看到相机画面，方便扫第二个，可以加上下面这句：
+        // setTimeout(() => { if(!isScanning) handleScanToggle(); }, 1000);
+    });
+        
 </script>
 </body>
 </html>
