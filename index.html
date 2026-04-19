@@ -418,7 +418,7 @@
             });
 
             // --- 核心修复：只读取一次响应体 ---
-            const result = await response.json().catch(() => ({})); 
+            const result = await response.json(); 
 
             if (response.ok) {
                 // 假设后端返回的数据格式是 { success: true, deviceDetails: [{id: 'X7y2P9zLq1', name: '实验室打印机'}, ...] }
@@ -431,11 +431,11 @@
                         }
                     });
                 }
-                
+                render();
                 alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
                 // 重置表单
                 deviceList = [];
-                render();
+                
                 document.getElementById('reason').value = "";
             } else {
                 // 根据后端返回的具体 error 字段判断
@@ -448,6 +448,7 @@
                 }
             }
         } catch (error) {
+            console.error("网络错误详情:", error);
             alert("❌ 提交失败，请检查网络或联系管理员\n" + error.message);
         } finally {
             submitBtn.disabled = false;
