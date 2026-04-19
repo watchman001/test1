@@ -419,9 +419,12 @@
                 render();
                 document.getElementById('reason').value = "";
             } else {
+                // 解析后端返回的 JSON
+                const result = await response.json();
                 // --- 新增：针对 IP 错误的特殊提示 ---
                 if (result.error === "IP错误，需要公司网络环境") {
-                    alert("🚫 提交失败：\n检测到您当前未连接公司网络。\n请切换到公司 Wi-Fi 后重试。");
+                    // alert("🚫 提交失败：\n检测到您当前未连接公司网络。\n请切换到公司 Wi-Fi 后重试。");
+                    alert(`🚫 访问受限\n后端识别到的 IP 是: ${result.debugIp}\n请联系管理员将其加入白名单。`);
                 } else {
                     throw new Error(result.error || "服务器响应失败");
                 }
