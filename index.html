@@ -270,17 +270,15 @@
         }
     }
 
-    function onScanSuccess(decodedText) {
+    async function onScanSuccess(decodedText) {
         let displayId = "";
         let recordId = "";
     
         try {
-            // 1. 尝试作为 URL 解析
             const url = new URL(decodedText);
-            displayId = url.searchParams.get('id'); // 获取 10 位随机设备 ID
-            recordId = url.searchParams.get('rid'); // 获取维格表记录 ID
+            displayId = url.searchParams.get('id');
+            recordId = url.searchParams.get('rid');
         } catch (e) {
-            // 2. 备用方案：尝试解析 纯文本格式 "随机ID|记录ID"
             if (decodedText.includes('|')) {
                 const parts = decodedText.split('|');
                 displayId = parts[0];
@@ -288,41 +286,20 @@
             }
         }
     
-        // 安全校验：如果两个关键参数缺一不可
-        if (!displayId || !recordId) {
-            console.warn("非有效设备二维码:", decodedText);
-            return;
-        }
+        if (!displayId || !recordId) return;
     
-        // 3. 冷却机制：5秒内相同 recordId 不重复触发
+        // 1. 冷却机制与查重
         const now = Date.now();
         if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
         lastScannedId = recordId;
         lastScannedTime = now;
     
-        // 4. 查重逻辑
-        const isDuplicate = deviceList.some(item => item.recordId === recordId);
-        
-        if (isDuplicate) {
-            // 由于是随机码，提示时可以不显示具体 ID，或者显示前 4 位
+        if (deviceList.some(item => item.recordId === recordId)) {
             showToast(`设备已在清单中`, "rgba(255, 149, 0, 0.9)");
-        } else {
-            // 5. 添加到清单 (chineseName 留空，后端提交后会匹配返回)
-            deviceList.push({ 
-                displayId: displayId, 
-                recordId: recordId,
-                chineseName: "查询中..." 
-            });
-            
-            render(); // 立即渲染列表
-            
-            showToast(`成功添加设备`, "rgba(52, 199, 89, 0.9)");
-            
-            // 触觉反馈
-            if (navigator.vibrate) navigator.vibrate(80);
+            return;
         }
-
-        // --- 核心改动：先占位，再异步更新名字 ---
+    
+        // 2. 先创建占位对象并推入列表，立即渲染
         const newDevice = { 
             displayId: displayId, 
             recordId: recordId, 
@@ -334,7 +311,7 @@
         showToast(`已添加新设备`, "rgba(52, 199, 89, 0.9)");
         if (navigator.vibrate) navigator.vibrate(80);
     
-        // --- 立即发起异步请求查询真实名称 ---
+        // 3. 异步获取中文名
         try {
             const response = await fetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
@@ -344,17 +321,17 @@
                 },
                 body: JSON.stringify({ action: 'queryName', id: displayId })
             });
+            
             const result = await response.json();
             if (result.name) {
-                newDevice.chineseName = result.name; // 更新该引用对象的名称
-                render(); // 再次渲染，名字会从“查询中...”瞬间变成真实名称
+                newDevice.chineseName = result.name; // 直接修改对象引用
+                render(); // 再次渲染以显示真实名称
             }
         } catch (err) {
-            newDevice.chineseName = "查询失败";
+            console.error("名称查询失败:", err);
+            newDevice.chineseName = "查询失败 (网络问题)";
             render();
         }
-
-        
     }
     
 
