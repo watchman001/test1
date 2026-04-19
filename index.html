@@ -321,6 +321,40 @@
             // 触觉反馈
             if (navigator.vibrate) navigator.vibrate(80);
         }
+
+        // --- 核心改动：先占位，再异步更新名字 ---
+        const newDevice = { 
+            displayId: displayId, 
+            recordId: recordId, 
+            chineseName: "查询中..." 
+        };
+        deviceList.push(newDevice);
+        render(); 
+        
+        showToast(`已添加新设备`, "rgba(52, 199, 89, 0.9)");
+        if (navigator.vibrate) navigator.vibrate(80);
+    
+        // --- 立即发起异步请求查询真实名称 ---
+        try {
+            const response = await fetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X_Api_Token': 'MySecureToken123' 
+                },
+                body: JSON.stringify({ action: 'queryName', id: displayId })
+            });
+            const result = await response.json();
+            if (result.name) {
+                newDevice.chineseName = result.name; // 更新该引用对象的名称
+                render(); // 再次渲染，名字会从“查询中...”瞬间变成真实名称
+            }
+        } catch (err) {
+            newDevice.chineseName = "查询失败";
+            render();
+        }
+
+        
     }
     
 
@@ -465,10 +499,22 @@
             if (displayId && recordId) {
                 // 确保 deviceList 已经定义
                 if (!deviceList.some(item => item.recordId === recordId)) {
-                    deviceList.push({ displayId, recordId });
+                    const newDevice = { displayId, recordId, chineseName: "查询中..." };
+                    // deviceList.push({ displayId, recordId });
+                    deviceList.push(newDevice);
                     render(); // 调用你之前的渲染函数
-                    showToast(`已通过链接添加: ${displayId}`, "rgba(52, 199, 89, 0.9)");
-                    
+
+                    // 同样执行异步查询
+                    const response = await fetch(CLOUD_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X_Api_Token': 'MySecureToken123' },
+                        body: JSON.stringify({ action: 'queryName', id: displayId })
+                    });
+                    const result = await response.json();
+                    if (result.name) {
+                        newDevice.chineseName = result.name;
+                        render();
+                    }                                   
                     // 推荐开启：扫码进入后，清除地址栏参数，防止刷新页面时重复弹出提示
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }
