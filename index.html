@@ -275,45 +275,51 @@
         let recordId = "";
     
         try {
-            // 核心修复：直接将扫码内容转化为标准的 URL 对象
-            // 这样无论是在 GitHub Pages 还是本地测试，解析都极度精准
+            // 1. 尝试作为 URL 解析
             const url = new URL(decodedText);
-            displayId = url.searchParams.get('id');
-            recordId = url.searchParams.get('rid');
-    
-            // 如果解析不到关键参数，说明这不是我们要的设备码
-            if (!displayId || !recordId) {
-                console.warn("非设备登记二维码:", decodedText);
-                return; 
-            }
-    
-            const now = Date.now();
-            // 冷却机制：5秒内相同 recordId 不触发
-            if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
-    
-            lastScannedId = recordId;
-            lastScannedTime = now;
-    
-            // 查重
-            const isDuplicate = deviceList.some(item => item.recordId === recordId);
-            
-            if (isDuplicate) {
-                showToast(`已在清单中: ${displayId}`, "rgba(255, 149, 0, 0.9)");
-            } else {
-                deviceList.push({ displayId, recordId });
-                render(); // 确保立即渲染列表
-                showToast(`已添加: ${displayId}`, "rgba(52, 199, 89, 0.9)");
-                if (navigator.vibrate) navigator.vibrate(80);
-            }
+            displayId = url.searchParams.get('id'); // 获取 10 位随机设备 ID
+            recordId = url.searchParams.get('rid'); // 获取维格表记录 ID
         } catch (e) {
-            // 如果扫描的不是网址（比如纯文本），URL 构造器会报错，这里做个兼容
-            console.error("URL解析失败，尝试备用方案", e);
+            // 2. 备用方案：尝试解析 纯文本格式 "随机ID|记录ID"
             if (decodedText.includes('|')) {
                 const parts = decodedText.split('|');
                 displayId = parts[0];
                 recordId = parts[1];
-                // ... 重复上面的添加逻辑 ...
             }
+        }
+    
+        // 安全校验：如果两个关键参数缺一不可
+        if (!displayId || !recordId) {
+            console.warn("非有效设备二维码:", decodedText);
+            return;
+        }
+    
+        // 3. 冷却机制：5秒内相同 recordId 不重复触发
+        const now = Date.now();
+        if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
+        lastScannedId = recordId;
+        lastScannedTime = now;
+    
+        // 4. 查重逻辑
+        const isDuplicate = deviceList.some(item => item.recordId === recordId);
+        
+        if (isDuplicate) {
+            // 由于是随机码，提示时可以不显示具体 ID，或者显示前 4 位
+            showToast(`设备已在清单中`, "rgba(255, 149, 0, 0.9)");
+        } else {
+            // 5. 添加到清单 (chineseName 留空，后端提交后会匹配返回)
+            deviceList.push({ 
+                displayId: displayId, 
+                recordId: recordId,
+                chineseName: "查询中..." 
+            });
+            
+            render(); // 立即渲染列表
+            
+            showToast(`成功添加设备`, "rgba(52, 199, 89, 0.9)");
+            
+            // 触觉反馈
+            if (navigator.vibrate) navigator.vibrate(80);
         }
     }
     
@@ -368,7 +374,8 @@
         // 使用 map 结合 join 是性能最好且最不容易出错的方式
         const htmlSegments = deviceList.map((item, index) => {
             // 容错：防止 displayId 为空时显示异常
-            const showName = item.displayId || "未知设备";
+            // const showName = item.displayId || "未知设备";
+            const showName = item.chineseName || item.displayId; // 如果后端还没返中文名，先显 ID
             const recordId = item.recordId || "无ID";
     
             return `
@@ -422,7 +429,7 @@
             } else {
                 // 根据后端返回的具体 error 字段判断
                 if (result.error === "IP错误，需要公司网络环境") {
-                    alert(`🚫 提交失败：\n检测到您当前未连接公司网络。\n\n当前 IP: ${result.debugIp || '未知'}\n请切换到公司 Wi-Fi 后重试。`);
+                    alert(`🚫 提交失败：\n检测到您当前未连接专用网络。\n\n当前 IP: ${result.debugIp || '未知'}\n请切换到专用 Wi-Fi 后重试。`);
                 } else if (response.status === 403) {
                     alert("🚫 访问被拒绝：权限不足或 IP 不在白名单内。");
                 } else {
