@@ -467,7 +467,7 @@
         }
     }
 
-    function checkInitialUrlParams() {
+    async function checkInitialUrlParams() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const displayId = urlParams.get('id');
@@ -477,7 +477,6 @@
                 // 确保 deviceList 已经定义
                 if (!deviceList.some(item => item.recordId === recordId)) {
                     const newDevice = { displayId, recordId, chineseName: "查询中..." };
-                    // deviceList.push({ displayId, recordId });
                     deviceList.push(newDevice);
                     render(); // 调用你之前的渲染函数
 
