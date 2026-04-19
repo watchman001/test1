@@ -410,7 +410,8 @@
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json(); // 解析后端返回的 JSON            
+            // --- 核心修复：只读取一次响应体 ---
+            const result = await response.json().catch(() => ({})); 
 
             if (response.ok) {
                 alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
@@ -419,14 +420,13 @@
                 render();
                 document.getElementById('reason').value = "";
             } else {
-                // 解析后端返回的 JSON
-                const result = await response.json();
-                // --- 新增：针对 IP 错误的特殊提示 ---
+                // 根据后端返回的具体 error 字段判断
                 if (result.error === "IP错误，需要公司网络环境") {
-                    // alert("🚫 提交失败：\n检测到您当前未连接公司网络。\n请切换到公司 Wi-Fi 后重试。");
-                    alert(`🚫 访问受限\n后端识别到的 IP 是: ${result.debugIp}\n请联系管理员将其加入白名单。`);
+                    alert(`🚫 提交失败：\n检测到您当前未连接公司网络。\n\n当前 IP: ${result.debugIp || '未知'}\n请切换到公司 Wi-Fi 后重试。`);
+                } else if (response.status === 403) {
+                    alert("🚫 访问被拒绝：权限不足或 IP 不在白名单内。");
                 } else {
-                    throw new Error(result.error || "服务器响应失败");
+                    alert("❌ 服务器错误: " + (result.error || "未知故障"));
                 }
             }
         } catch (error) {
