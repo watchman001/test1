@@ -281,37 +281,37 @@
         } catch (e) {
             if (decodedText.includes('|')) {
                 const parts = decodedText.split('|');
-                displayId = parts[0];
-                recordId = parts[1];
+                displayId = parts[0]; recordId = parts[1];
             }
         }
     
         if (!displayId || !recordId) return;
     
-        // 1. 冷却机制与查重
+        // 冷却机制
         const now = Date.now();
         if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
         lastScannedId = recordId;
         lastScannedTime = now;
     
+        // 查重
         if (deviceList.some(item => item.recordId === recordId)) {
             showToast(`设备已在清单中`, "rgba(255, 149, 0, 0.9)");
             return;
         }
     
-        // 2. 先创建占位对象并推入列表，立即渲染
+        // --- 关键修改点 1：先添加到列表并显示“查询中” ---
         const newDevice = { 
             displayId: displayId, 
             recordId: recordId, 
             chineseName: "查询中..." 
         };
         deviceList.push(newDevice);
-        render(); 
+        render(); // 立即渲染，让用户看到“查询中”
         
         showToast(`已添加新设备`, "rgba(52, 199, 89, 0.9)");
         if (navigator.vibrate) navigator.vibrate(80);
     
-        // 3. 异步获取中文名
+        // --- 关键修改点 2：立即向后端请求真实中文名 ---
         try {
             const response = await fetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
@@ -324,8 +324,8 @@
             
             const result = await response.json();
             if (result.name) {
-                newDevice.chineseName = result.name; // 直接修改对象引用
-                render(); // 再次渲染以显示真实名称
+                newDevice.chineseName = result.name; // 修改对象属性
+                render(); // 再次渲染，更新名字
             }
         } catch (err) {
             console.error("名称查询失败:", err);
