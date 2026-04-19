@@ -421,6 +421,17 @@
             const result = await response.json().catch(() => ({})); 
 
             if (response.ok) {
+                // 假设后端返回的数据格式是 { success: true, deviceDetails: [{id: 'X7y2P9zLq1', name: '实验室打印机'}, ...] }
+                if (result.deviceDetails) {
+                    result.deviceDetails.forEach(detail => {
+                        // 在当前的 deviceList 中寻找对应的随机 ID，并补充中文名
+                        const device = deviceList.find(d => d.displayId === detail.id);
+                        if (device) {
+                            device.chineseName = detail.name;
+                        }
+                    });
+                }
+                
                 alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
                 // 重置表单
                 deviceList = [];
