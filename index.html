@@ -228,6 +228,9 @@
     const COOLDOWN_MS = 5000; // 5秒内相同二维码不重复提示
 
     async function authInit() {
+        if (!window.PublicKeyCredential) {
+            alert("当前浏览器或环境不支持生物识别(WebAuthn)");
+        }
         if (SESSION_ID) return;
 
         const user = prompt("请输入姓名（首次会注册设备）");
@@ -405,8 +408,7 @@
             const response = await secureFetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
                 headers: { 
-                    'Content-Type': 'application/json',
-                    'X_Api_Token': 'MySecureToken123' 
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ action: 'queryName', id: displayId })
             });
@@ -511,8 +513,7 @@
             const response = await secureFetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
                 headers: { 
-                    'Content-Type': 'application/json',
-                    'X_Api_Token': 'MySecureToken123' // 这里的 Token 要和后端一致
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(payload)
             });
@@ -572,7 +573,7 @@
                     // 同样执行异步查询
                     const response = await secureFetch(CLOUD_FUNCTION_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X_Api_Token': 'MySecureToken123' },
+                        headers: { 'Content-Type': 'application/json'},
                         body: JSON.stringify({ action: 'queryName', id: displayId })
                     });
                     const result = await response.json();
