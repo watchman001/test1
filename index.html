@@ -211,30 +211,22 @@
 </div>
 
 <script>
-    // ================= 配置 =================
+    // --- 配置区 ---
+    // 替换为你腾讯云函数的公网访问URL
     const CLOUD_FUNCTION_URL = "https://1423343166-51736jvihk.ap-shanghai.tencentscf.com"; 
 
+    let html5QrCode = null;
+    let deviceList = [];
+    let isScanning = false;
+    let isLock = false;
     let SESSION_ID = localStorage.getItem("sessionId") || null;
     let CURRENT_USER = localStorage.getItem("user") || null;
 
-    // ================= WebAuthn 工具函数 =================
-    function bufferToBase64url(buffer) {
-        return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-    }
+    // --- 冷却机制变量 ---
+    let lastScannedId = null;
+    let lastScannedTime = 0;
+    const COOLDOWN_MS = 5000; // 5秒内相同二维码不重复提示
 
-    function base64urlToBuffer(base64url) {
-        const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-        const pad = base64.length % 4;
-        const padded = base64 + (pad ? '='.repeat(4 - pad) : '');
-        const binary = atob(padded);
-        const buffer = new ArrayBuffer(binary.length);
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        return buffer;
-    }
-
-    // ================= 登录流程 =================
     async function authInit() {
         if (SESSION_ID) return;
 
@@ -243,7 +235,6 @@
         localStorage.setItem("user", user);
 
         try {
-            // ========= 尝试登录 =========
             let res = await fetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -282,7 +273,6 @@
             localStorage.setItem("sessionId", SESSION_ID);
 
         } catch (e) {
-            // ========= 如果登录失败 → 自动注册 =========
             console.log("未注册，开始注册");
 
             let res = await fetch(CLOUD_FUNCTION_URL, {
@@ -314,69 +304,298 @@
                 body: JSON.stringify({ action: 'registerFinish', user, credential })
             });
 
-            // 注册后自动登录
             return authInit();
         }
     }
 
-    // ================= 替换 fetch =================
     async function secureFetch(url, options = {}) {
         options.headers = options.headers || {};
         options.headers['Authorization'] = SESSION_ID;
         return fetch(url, options);
     }
 
-    // ================= 修改原 submit =================
+    async function handleScanToggle() {
+        if (isLock) return;
+        isLock = true;
+        
+        // 强制收起键盘
+        document.activeElement.blur();
+
+        const scanBtn = document.getElementById('scanBtn');
+        const container = document.getElementById('reader-container');
+
+        try {
+            if (!isScanning) {
+                container.classList.add('active');
+                scanBtn.innerText = "结束扫码";
+                scanBtn.classList.add('btn-scanning-active');
+
+                if (html5QrCode) await html5QrCode.clear();
+                html5QrCode = new Html5Qrcode("reader");
+                isScanning = true;
+
+                // 稍微延迟启动，等待容器展开动画完成
+                setTimeout(async () => {
+                    try {
+                        await html5QrCode.start(
+                            { facingMode: "environment" },
+                            { 
+                                fps: 15, 
+                                qrbox: { width: 250, height: 250 },
+                                aspectRatio: 1.0 
+                            },
+                            onScanSuccess
+                        );
+                    } catch (err) {
+                        alert("无法启动相机，请确保处于HTTPS环境并允许权限");
+                        stopAndReset();
+                    }
+                }, 400);
+            } else {
+                await stopAndReset();
+            }
+        } finally {
+            setTimeout(() => { isLock = false; }, 500);
+        }
+    }
+
+    async function onScanSuccess(decodedText) {
+        let displayId = "";
+        let recordId = "";
+    
+        try {
+            const url = new URL(decodedText);
+            displayId = url.searchParams.get('id');
+            recordId = url.searchParams.get('rid');
+        } catch (e) {
+            if (decodedText.includes('|')) {
+                const parts = decodedText.split('|');
+                displayId = parts[0]; recordId = parts[1];
+            }
+        }
+    
+        if (!displayId || !recordId) return;
+    
+        // 冷却机制
+        const now = Date.now();
+        if (recordId === lastScannedId && (now - lastScannedTime) < 5000) return;
+        lastScannedId = recordId;
+        lastScannedTime = now;
+    
+        // 查重
+        if (deviceList.some(item => item.recordId === recordId)) {
+            showToast(`设备已在清单中`, "rgba(255, 149, 0, 0.9)");
+            return;
+        }
+    
+        // --- 关键修改点 1：先添加到列表并显示“查询中” ---
+        const newDevice = { 
+            displayId: displayId, 
+            recordId: recordId, 
+            chineseName: "查询中..." 
+        };
+        deviceList.push(newDevice);
+        render(); // 立即渲染，让用户看到“查询中”
+        
+        showToast(`已添加新设备`, "rgba(52, 199, 89, 0.9)");
+        if (navigator.vibrate) navigator.vibrate(80);
+    
+        // --- 关键修改点 2：立即向后端请求真实中文名 ---
+        try {
+            const response = await secureFetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X_Api_Token': 'MySecureToken123' 
+                },
+                body: JSON.stringify({ action: 'queryName', id: displayId })
+            });
+            
+            const result = await response.json();
+            if (result.name) {
+                newDevice.chineseName = result.name; // 修改对象属性
+                render(); // 再次渲染，更新名字
+            }
+        } catch (err) {
+            console.error("名称查询失败:", err);
+            newDevice.chineseName = "查询失败 (网络问题)";
+            render();
+        }
+    }
+    
+
+    function showToast(text, bgColor) {
+        const toast = document.getElementById('scan-toast');
+        toast.innerText = text;
+        toast.style.backgroundColor = bgColor;
+        toast.style.opacity = "1";
+        
+        clearTimeout(window.toastTimer);
+        window.toastTimer = setTimeout(() => {
+            toast.style.opacity = "0";
+        }, 2000);
+    }
+
+    async function stopAndReset() {
+        const scanBtn = document.getElementById('scanBtn');
+        const container = document.getElementById('reader-container');
+        
+        if (html5QrCode && html5QrCode.isScanning) {
+            await html5QrCode.stop();
+            await html5QrCode.clear();
+        }
+        
+        container.classList.remove('active');
+        scanBtn.innerText = "添加设备";
+        scanBtn.classList.remove('btn-scanning-active');
+        isScanning = false;
+        lastScannedId = null; 
+    }
+
+    function removeDevice(index) {
+        deviceList.splice(index, 1);
+        render();
+    }
+
+    function render() {
+        const content = document.getElementById('device-list-content');
+        const countLabel = document.getElementById('device-count');
+        
+        // 1. 实时更新计数显示
+        countLabel.innerText = `${deviceList.length} 台`;
+        
+        // 2. 如果清单空了，显示占位提示
+        if (deviceList.length === 0) {
+            content.innerHTML = '<div style="text-align:center; padding:30px; color:#999; font-size:14px;">等待扫描设备...</div>';
+            return;
+        }
+    
+        // 3. 构建列表 HTML
+        // 使用 map 结合 join 是性能最好且最不容易出错的方式
+        const htmlSegments = deviceList.map((item, index) => {
+            // 容错：防止 displayId 为空时显示异常
+            // const showName = item.displayId || "未知设备";
+            const showName = item.chineseName || item.displayId; // 如果后端还没返中文名，先显 ID
+            const recordId = item.recordId || "无ID";
+    
+            return `
+                <div class="device-item">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-family:monospace; font-weight:700; font-size:16px; color:#000;">${showName}</span>
+                        <span style="font-size:11px; color:#a1a1a6;">数据库ID: ${recordId}</span>
+                    </div>
+                    <button class="btn-delete" onclick="removeDevice(${index})">删除</button>
+                </div>
+            `;
+        });
+    
+        // 4. 最终一次性注入 DOM（防止频繁操作 DOM 导致闪烁）
+        content.innerHTML = htmlSegments.join('');
+    }
+
     async function submitFinalData() {
         const reason = document.getElementById('reason').value.trim();
+        const user = document.getElementById('user').value.trim();
         const submitBtn = document.getElementById('submitBtn');
 
-        if (!reason) return alert("请填写事由");
+        if (!reason || !user) return alert("请填写完整事由和姓名");
         if (deviceList.length === 0) return alert("请至少添加一个设备");
 
         submitBtn.disabled = true;
         submitBtn.innerText = "正在同步...";
+        
+        const payload = { reason, user, devices: deviceList };
 
-        const payload = { reason, devices: deviceList };
 
         try {
             const response = await secureFetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X_Api_Token': 'MySecureToken123' // 这里的 Token 要和后端一致
+                },
                 body: JSON.stringify(payload)
             });
 
-            const result = await response.json();
+            // --- 核心修复：只读取一次响应体 ---
+            const result = await response.json(); 
 
             if (response.ok) {
+                // 假设后端返回的数据格式是 { success: true, deviceDetails: [{id: 'X7y2P9zLq1', name: '实验室打印机'}, ...] }
+                if (result.deviceDetails) {
+                    result.deviceDetails.forEach(detail => {
+                        // 在当前的 deviceList 中寻找对应的随机 ID，并补充中文名
+                        const device = deviceList.find(d => d.displayId === detail.id);
+                        if (device) {
+                            device.chineseName = detail.name;
+                        }
+                    });
+                }
+                render();
                 alert(`✅ 成功登记 ${deviceList.length} 台设备！`);
+                // 重置表单
+                // deviceList = [];
+                
+                document.getElementById('reason').value = "";
             } else {
-                alert("❌ " + result.error);
+                // 根据后端返回的具体 error 字段判断
+                if (result.error === "IP错误，需要公司网络环境") {
+                    alert(`🚫 提交失败：\n检测到您当前未连接专用网络。\n\n当前 IP: ${result.debugIp || '未知'}\n请切换到专用 Wi-Fi 后重试。`);
+                } else if (response.status === 403) {
+                    alert("🚫 访问被拒绝：权限不足或 IP 不在白名单内。");
+                } else {
+                    alert("❌ 服务器错误: " + (result.error || "未知故障"));
+                }
             }
-        } catch (e) {
-            alert("网络错误");
+        } catch (error) {
+            console.error("网络错误详情:", error);
+            alert("❌ 提交失败，请检查网络或联系管理员\n" + error.message);
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerText = "立即提交";
         }
     }
 
-    // ================= 修改 queryName 请求 =================
-    async function fetchDeviceName(displayId) {
-        const res = await secureFetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'queryName', id: displayId })
-        });
+    async function checkInitialUrlParams() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const displayId = urlParams.get('id');
+            const recordId = urlParams.get('rid');
+    
+            if (displayId && recordId) {
+                // 确保 deviceList 已经定义
+                if (!deviceList.some(item => item.recordId === recordId)) {
+                    const newDevice = { displayId, recordId, chineseName: "查询中..." };
+                    deviceList.push(newDevice);
+                    render(); // 调用你之前的渲染函数
 
-        return res.json();
+                    // 同样执行异步查询
+                    const response = await secureFetch(CLOUD_FUNCTION_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X_Api_Token': 'MySecureToken123' },
+                        body: JSON.stringify({ action: 'queryName', id: displayId })
+                    });
+                    const result = await response.json();
+                    if (result.name) {
+                        newDevice.chineseName = result.name;
+                        render();
+                    }                                   
+                    // 推荐开启：扫码进入后，清除地址栏参数，防止刷新页面时重复弹出提示
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+        } catch (e) {
+            console.error("初始参数解析失败", e);
+        }
     }
-
-    // ================= 页面加载 =================
+    // ==========================================
+    // 2. 在最后绑定事件，确保页面加载完立即执行
+    // ==========================================
     window.addEventListener('DOMContentLoaded', async () => {
-        await authInit(); // 🔐 核心
+        await authInit();   // 🔐 加这一行
         checkInitialUrlParams();
     });
+        
 </script>
 </body>
 </html>
